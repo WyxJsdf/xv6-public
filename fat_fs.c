@@ -27,6 +27,7 @@ struct FAT32_DBR dbr;   // there should be one per dev, but we run with one dev
 void
 readDbr(int dev, struct FAT32_DBR *dbr)
 {
+    // cprintf("debug1\n" );
   struct buf *bp;
   bp = bread(dev, 0);
   memmove(dbr, bp->data, sizeof(*dbr));
@@ -39,6 +40,7 @@ readDbr(int dev, struct FAT32_DBR *dbr)
 uint getFATStart(uint cnum, uint *offset)
 {
   uint ret;
+    // cprintf("debug2\n" );
   *offset = (cnum * 4);
   ret = dbr.RsvdSecCnt + (*offset / dbr.BytesPerSec);
   *offset %= dbr.BytesPerSec;
@@ -46,6 +48,7 @@ uint getFATStart(uint cnum, uint *offset)
 }
 
 void updateFATs(struct buf* sp){
+    // cprintf("debug3\n" );
   struct buf *tp;
   int i, offset;
   for (i = 1, offset = dbr.FATSz32; i < dbr.NumFATs; i++, offset += dbr.FATSz32) {
@@ -58,12 +61,14 @@ void updateFATs(struct buf* sp){
 
 uint getFirstSector(uint cnum)
 {
+    // cprintf("debug4\n" );
   return (cnum - 2) * dbr.SecPerClus + dbr.RsvdSecCnt + dbr.NumFATs * dbr.FATSz32;
 }
 // Allocate a zeroed disk cluster.
 static uint
 fat32_calloc(uint dev)
 {
+    // cprintf("debug5\n" );
   uint cnum, nowSec, lastSec;
   struct buf *bp, *bfsi;
   struct FSInfo *fsi;
@@ -139,14 +144,16 @@ struct {
 void
 fat32_iinit(int dev)
 {
+    // cprintf("debug0\n" );
     initlock(&icache.lock, "icache");
     readDbr(dev, &dbr);
-    cprintf("dbr: BytesPerSec: %d   SecPerClus: %d   NumFATs: %d   TotSec32:   %d", dbr.BytesPerSec, dbr.SecPerClus, dbr.NumFATs, dbr.TotSec32);
+    cprintf("dbr: BytesPerSec: %d   SecPerClus: %d   NumFATs: %d   TotSec32:   %d\n", dbr.BytesPerSec, dbr.SecPerClus, dbr.NumFATs, dbr.TotSec32);
 }
 
 static struct inode* fat32_iget(uint dev, uint inum, uint dirCluster);
 
 struct inode* fat32_ialloc(struct inode *dp, short type){
+    // cprintf("debug6\n" );
     uint cnum = fat32_calloc(dp->dev);
     struct inode* ip = fat32_iget(dp->dev, cnum, dp->inum);
     ip->type = type;
@@ -157,10 +164,12 @@ struct inode* fat32_ialloc(struct inode *dp, short type){
 void
 fat32_iupdate(struct inode *ip)
 {
+    // cprintf("debug7\n" );
   struct buf *bp, *bp1;
   struct direntry *dip;
   uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec, i, j;
-  
+  if (ip->inum == 2)
+    panic("iupdate notion");
   readDbr(ip->dev, &dbr);
   lastSec = 0;
   do{
@@ -201,6 +210,7 @@ fat32_iupdate(struct inode *ip)
 static struct inode*
 fat32_iget(uint dev, uint inum, uint dirCluster)
 {
+     cprintf("debug8\n" );
   struct inode *ip, *empty;
   acquire(&icache.lock);
 
@@ -234,6 +244,7 @@ fat32_iget(uint dev, uint inum, uint dirCluster)
 struct inode*
 fat32_idup(struct inode *ip)
 {
+    // cprintf("debug9\n" );
   acquire(&icache.lock);
   ip->ref++;
   release(&icache.lock);
@@ -243,6 +254,7 @@ fat32_idup(struct inode *ip)
 void
 fat32_ilock(struct inode *ip)
 {
+     cprintf("debug10\n" );
   struct buf *bp, *bp1;
   struct direntry *dip;
   uint dirCluster = ip->dirCluster, st, i,j, nowSec, offset, lastSec;
@@ -307,6 +319,7 @@ fat32_ilock(struct inode *ip)
 void
 fat32_iunlock(struct inode *ip)
 {
+     cprintf("debug11\n" );
   if(ip == 0 || !(ip->flags & I_BUSY) || ip->ref < 1)
     panic("iunlock");
 
@@ -319,6 +332,7 @@ fat32_iunlock(struct inode *ip)
 static void
 fat32_itrunc(struct inode *ip)
 {
+    // cprintf("debug12\n" );
   struct buf *bp, *bp1;
   struct direntry *dip;
   struct FSInfo *fsi;
@@ -389,10 +403,11 @@ handleFAT:
 void
 fat32_iput(struct inode *ip)
 {
+     cprintf("debug13  %d\n" , ip->nlink);
   acquire(&icache.lock);
   if(ip->ref == 1 && (ip->flags & I_VALID) && ip->nlink == 0){
     // inode has no links and no other references: truncate and free.
-    if(ip->flags & I_BUSY)
+   if(ip->flags & I_BUSY)
       panic("iput busy");
     ip->flags |= I_BUSY;
     release(&icache.lock);
@@ -421,6 +436,7 @@ fat32_iunlockput(struct inode *ip)
 void
 fat32_stati(struct inode *ip, struct stat *st)
 {
+    // cprintf("debug14\n" );
   st->dev = ip->dev;
   st->ino = ip->inum;
   st->type = ip->type;
@@ -431,6 +447,7 @@ fat32_stati(struct inode *ip, struct stat *st)
 int
 fat32_readi(struct inode *ip, char *dst, uint off, uint n)
 {
+    // cprintf("debug15\n" );
   struct buf *bp, *bp1;
   uint nowSec, lastSec, cnum, nowOff = 0, offset, i, st, j, s1, t1;
   readDbr(ip->dev, &dbr);
@@ -492,6 +509,7 @@ fat32_readi(struct inode *ip, char *dst, uint off, uint n)
 int
 fat32_writei(struct inode *ip, char *src, uint off, uint n)
 {
+    // cprintf("debug16\n" );
   struct buf *bp, *bp1;
   uint nowSec, lastSec, cnum, nowOff = 0, offset, i, st, j, s1, t1;
   readDbr(ip->dev, &dbr);
@@ -570,6 +588,7 @@ namecmp(const char *s, const char *t)
 struct inode*
 fat32_dirlookup(struct inode *dp, char *name, uint *poff)
 {
+     cprintf("debug17\n" );
   uint off, cnum;
   struct direntry dip;
 
@@ -596,6 +615,7 @@ fat32_dirlookup(struct inode *dp, char *name, uint *poff)
 int
 fat32_dirlink(struct inode *dp, char *name, struct inode*dp1)
 {
+    // cprintf("debug18\n" );
   int off;
   struct direntry de;
   struct inode *ip;
@@ -626,6 +646,7 @@ fat32_dirlink(struct inode *dp, char *name, struct inode*dp1)
 static char*
 skipelem(char *path, char *name)
 {
+    // cprintf("debug19\n" );
   char *s;
   int len;
 
@@ -651,25 +672,29 @@ skipelem(char *path, char *name)
 static struct inode*
 fat32_namex(char *path, int nameiparent, char *name)
 {
+    // cprintf("debug20\n" );
   struct inode *ip, *next;
+  cprintf("%s\n", path);
+  if(*path == '/')
+    ip = fat32_iget(ROOTDEV, 2, 0);
+  else
+    ip = fat32_idup(proc->cwd);
 
-  if(*path == '.'){
-    ip = proc->cwd;
-    if (ip->inum == 2)
-      path++;
-   }
   while((path = skipelem(path, name)) != 0){
     fat32_ilock(ip);
     if(ip->type != T_DIR){
       fat32_iunlockput(ip);
+      cprintf("%s error 1\n", path);
       return 0;
     }
     if(nameiparent && *path == '\0'){
       // Stop one level early.
       fat32_iunlock(ip);
+      cprintf("%s success1\n", path);
       return ip;
     }
     if((next = fat32_dirlookup(ip, name, 0)) == 0){
+      cprintf("%s error 2 %s %d\n", path, name, ip->inum);
       fat32_iunlockput(ip);
       return 0;
     }
@@ -678,20 +703,24 @@ fat32_namex(char *path, int nameiparent, char *name)
   }
   if(nameiparent){
     fat32_iput(ip);
+      cprintf("%s error 3\n", path);
     return 0;
   }
+  cprintf("%s success2\n", path);
   return ip;
 }
 
 struct inode*
 fat32_namei(char *path)
 {
-  char name[DIRSIZ];
+     // cprintf("debug21\n" );
+ char name[DIRSIZ];
   return fat32_namex(path, 0, name);
 }
 
 struct inode*
 fat32_nameiparent(char *path, char *name)
 {
+    // cprintf("debug22\n" );
   return fat32_namex(path, 1, name);
 }
