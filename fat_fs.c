@@ -142,27 +142,61 @@ struct {
 } icache;
 
 void
-iinit(int dev)
+fat32_iinit(int dev)
 {
     initlock(&icache.lock, "icache");
     readDbr(dev, &dbr);
     cprintf("dbr: BytesPerSec: %d   SecPerClus: %d   NumFATs: %d   TotSec32:   %d", dbr.BytesPerSec, dbr.SecPerClus, dbr.NumFATs, dbr.TotSec32);
 }
 
-static struct inode* iget(uint dev, uint inum);
-
-struct inode*
-ialloc(uint dev, short type)
-{
-}
+static struct inode* fat32_iget(uint dev, uint inum, uint dirCluster);
 
 void
-iupdate(struct inode *ip)
+fat32_iupdate(struct inode *ip)
 {
+  struct buf *bp, *bp1;
+  struct direntry *dip;
+  uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec;
+
+  lastSec = 0;
+  do{
+    st = getFirstSector(dirCluster);
+    for (i = st; i < st + dbr->SecPerClus; i++){
+      bp = bread(ip->dev, i);
+      for (j = bp->data; j < bp->data+512; j+=sizeof(direntry)){
+        dip = (struct direntry*)j;
+        if (((dip->deHighClust << 16)|dip->deLowCluster) == ip->inum){
+          dip->deAttributes = (uchar)ip->type;
+          dip->deCTime = (ushort)ip->major;
+          dip->deCDate = (ushort)ip->minor;
+          dip->deFileSize = ip->size;
+          bwrite(bp);
+          brelse(bp);
+          if (bp1)
+            brelse(bp1);
+          return;
+        }
+      }
+      brelse(bp);
+    }
+    nowSec = getFATStart(dirCluster, offset);
+    if (nowSec != lastSec){
+      if (bp1)
+        brelse(bp1);
+      bp1 = bread(ip->dev, nowSec);
+      lastSec = nowSec;
+    }
+    if (*(uint *)(bp1->data + offset) < LAST_FAT_VALUE)
+       dirCluster = *(uint *)(bp1->data + offset);
+     else break;
+  }while (true);
+}
+  panic("update error");
+
 }
 
 static struct inode*
-iget(uint dev, uint inum, uint dirCluster)
+fat32_iget(uint dev, uint inum, uint dirCluster)
 {
   struct inode *ip, *empty;
   acquire(&icache.lock);
@@ -195,7 +229,7 @@ iget(uint dev, uint inum, uint dirCluster)
 }
 
 struct inode*
-idup(struct inode *ip)
+fat32_idup(struct inode *ip)
 {
   acquire(&icache.lock);
   ip->ref++;
@@ -204,11 +238,11 @@ idup(struct inode *ip)
 }
 
 void
-ilock(struct inode *ip)
+fat32_ilock(struct inode *ip)
 {
-  struct buf *bp;
+  struct buf *bp, *bp1;
   struct direntry *dip;
-  uint dirCluster = ip->dirCluster;
+  uint dirCluster = ip->dirCluster, st, i,j, nowSec, offset, lastSec;
 
   if(ip == 0 || ip->ref < 1)
     panic("ilock");
@@ -218,28 +252,56 @@ ilock(struct inode *ip)
     sleep(ip, &icache.lock);
   ip->flags |= I_BUSY;
   release(&icache.lock);
-
-  if(!(ip->flags & I_VALID)){
-    
-    bp = bread(ip->dev, IBLOCK(ip->inum, sb));
-    dip = (struct dinode*)bp->data + ip->inum%IPB;
-    ip->type = dip->type;
-    ip->major = dip->major;
-    ip->minor = dip->minor;
-    ip->nlink = dip->nlink;
-    ip->size = dip->size;
-    memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
-    brelse(bp);
+  
+ if (ip->inum == 2) {     // Root file
+    ip->type = T_DIR;
+    ip->nlink = 1;
     ip->flags |= I_VALID;
-    if(ip->type == 0)
-      panic("ilock: no type");
+    return;
   }
-
+  if(!(ip->flags & I_VALID)){
+    lastSec = 0;
+    do{
+    st = getFirstSector(dirCluster);
+    for (i = st; i < st + dbr->SecPerClus; i++){
+      bp = bread(ip->dev, i);
+      for (j = bp->data; j < bp->data+512; j+=sizeof(direntry)){
+        dip = (struct direntry*)j;
+        if (((dip->deHighClust << 16)|dip->deLowCluster) == ip->inum){
+          ip->type = (short)dip->deAttributes;
+          ip->major = (short) dip->deCTime;
+          ip->minor = (short) dip->deCDate;
+          ip->nlink = 1;
+          ip->size = dip->deFileSize;
+          brelse(bp);
+          if (bp1)
+            brelse(bp1);
+          ip->flags |= I_VALID;
+          if(ip->type == 0)
+            panic("ilock: no type");
+          return;
+        }
+      }
+      brelse(bp);
+    }
+    nowSec = getFATStart(dirCluster, offset);
+    if (nowSec != lastSec){
+      if (bp1)
+        brelse(bp1);
+      bp1 = bread(ip->dev, nowSec);
+      lastSec = nowSec;
+    }
+    if (*(uint *)(bp1->data + offset) < LAST_FAT_VALUE)
+       dirCluster = *(uint *)(bp1->data + offset);
+     else break;
+  }while (true);
+}
+  panic("ilock error");
 }
 
 // Unlock the given inode.
 void
-iunlock(struct inode *ip)
+fat32_iunlock(struct inode *ip)
 {
   if(ip == 0 || !(ip->flags & I_BUSY) || ip->ref < 1)
     panic("iunlock");
@@ -251,7 +313,7 @@ iunlock(struct inode *ip)
 }
 
 void
-iput(struct inode *ip)
+fat32_iput(struct inode *ip)
 {
 }
 
