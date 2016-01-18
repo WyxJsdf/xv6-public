@@ -4,6 +4,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <time.h>
 
 #define stat xv6_stat  // avoid clash with host struct stat
 #include "types.h"
@@ -65,14 +66,12 @@ void czero(uint clus);
 */
 void appendBuf(uint clus, void *buf, int size, int curWSize);
 /* 函数功能：时间获取函数*/
-/*
 uchar getSecond();
 uchar getMinute();
 uchar getHour();
 uchar getDay();
 uchar getMonth();
 uchar getYear();
-*/
 /* 函数功能: 初始化函数 */
 void initDBR();
 void initFSI();
@@ -86,6 +85,7 @@ uint retFileSize(char* filename);
 // convert to intel byte order
 ushort xshort(ushort x);
 uint xint(uint x);
+ushort combineUchar(uchar hour, uchar min);
 
 
 int main(int argc, char *argv[])
@@ -271,7 +271,10 @@ struct direntry mkFCB(uchar type, char *name, int size, uint *clusNum)
   memset(de.deExtension, 0, sizeof(de.deExtension));
   de.deAttributes = type;
   // 文件创建时间和日期
-  // ?
+  de.deCTime = combineUchar(getHour(), getMinute());
+  de.deCDate = combineUchar(getMonth(), getDay());
+  de.deMTime = de.deCTime;
+  de.deMDate = de.deCDate;
   de.deFileSize = size;
   *clusNum = cnallloc();
   de.deHighClust = (ushort)((*clusNum) >> 16);
@@ -435,55 +438,59 @@ void initDat()
   fstClusSec = nDBR + nRetain + nFAT * 2;  // 第一个簇对应的第一个扇区号
 }
 
-/*
 uchar getSecond()
 {
-  uchar data = 0;
-  outb(0x70, 0x00);
-  data = inb(0x71);
-  return (data >> 4) * 10 + (data & 0xf);
+  time_t rawtime;
+  struct tm* timeinfo;
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+  return ((uchar)timeinfo->tm_sec);
 }
 
 uchar getMinute()
 {
-  uchar data;
-  outb(0x70, 0x02);
-  data = inb(0x71);
-  return (data >> 4) * 10 + (data & 0xf);
+  time_t rawtime;
+  struct tm* timeinfo;
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+  return ((uchar)timeinfo->tm_min);
 }
 
 uchar getHour()
 {
-  uchar data;
-  outb(0x70, 0x04);
-  data = inb(0x71);
-  return ((data >> 4) * 10 + (data & 0xf) + 8) % 24;
+  time_t rawtime;
+  struct tm* timeinfo;
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+  return ((uchar)timeinfo->tm_hour);
 }
 
 uchar getDay()
 {
- uchar data;
- outb(0x70, 0x07);
- data = inb(0x71);
- return (data >> 4) * 10 + (data & 0xf);
+  time_t rawtime;
+  struct tm* timeinfo;
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+ return ((uchar)timeinfo->tm_mday);
 }
 
 uchar getMonth()
 {
-  uchar data;
-  outb(0x70, 0x08);
-  data = inb(0x71);
-  return (data >> 4) * 10 + (data & 0xf);
+  time_t rawtime;
+  struct tm* timeinfo;
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+  return ((uchar)timeinfo->tm_mon);
 }
 
 uchar getYear()
 {
-  ushort data;
-  outb(0x70, 0x09);
-  data = inb(0x71);
-  return (data >> 4) * 10 + (data & 0xf);
+  time_t rawtime;
+  struct tm* timeinfo;
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+  return ((uchar)timeinfo->tm_year);
 }
-*/
 
 ushort xshort(ushort x)
 {
@@ -505,6 +512,10 @@ uint xint(uint x)
   return y;
 }
 
+ushort combineUchar(uchar hour, uchar min)
+{
+  return (((ushort)hour << 8) + (ushort)min);
+}
 
 /*
 void
