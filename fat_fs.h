@@ -3,6 +3,8 @@
 #define RETAINSEC    2  // number of retain sectors 保留扇区个数
 #define NDIRECT     12  // ?
 #define FNSIZE      14
+#define DIRSIZ     11
+#define BSIZE 512
 
 struct FAT32_DBR
 {
@@ -46,10 +48,10 @@ struct FSInfo
   uint TrailSig;		//结束标记表示是一个FSInfo扇区
 };
 
-typedef struct direntry
+ typedef struct direntry
 {
-   uchar deName[8];       // 文件名
-   uchar deExtension[3];    // 扩展名
+   uchar deName[11];       // 文件名
+//   uchar deExtension[3];    // 扩展名
    uchar deAttributes;     // 文件属性
    uchar deLowerCase;         // 系统保留
    uchar deCHundredth;         // 创建时间的10 毫秒位
@@ -69,5 +71,7 @@ struct finode {
   short minor;          // Minor device number (T_DEV only)
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
-  uint addrs[NDIRECT+2];   // Data block addresses
 };
+
+#define LAST_FAT_VALUE 0xffffff0f
+#define MAXFILE 100

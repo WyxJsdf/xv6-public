@@ -5,7 +5,7 @@
 #include "types.h"
 #include "defs.h"
 #include "param.h"
-#include "fs.h"
+#include "fat_fs.h"
 #include "file.h"
 #include "spinlock.h"
 
@@ -72,9 +72,9 @@ fileclose(struct file *f)
   if(ff.type == FD_PIPE)
     pipeclose(ff.pipe, ff.writable);
   else if(ff.type == FD_INODE){
-    begin_op();
-    iput(ff.ip);
-    end_op();
+//    begin_op();
+    fat32_iput(ff.ip);
+//    end_op();
   }
 }
 
@@ -83,9 +83,9 @@ int
 filestat(struct file *f, struct stat *st)
 {
   if(f->type == FD_INODE){
-    ilock(f->ip);
-    stati(f->ip, st);
-    iunlock(f->ip);
+    fat32_ilock(f->ip);
+    fat32_stati(f->ip, st);
+    fat32_iunlock(f->ip);
     return 0;
   }
   return -1;
@@ -102,10 +102,10 @@ fileread(struct file *f, char *addr, int n)
   if(f->type == FD_PIPE)
     return piperead(f->pipe, addr, n);
   if(f->type == FD_INODE){
-    ilock(f->ip);
-    if((r = readi(f->ip, addr, f->off, n)) > 0)
+    fat32_ilock(f->ip);
+    if((r = fat32_readi(f->ip, addr, f->off, n)) > 0)
       f->off += r;
-    iunlock(f->ip);
+    fat32_iunlock(f->ip);
     return r;
   }
   panic("fileread");
@@ -136,12 +136,12 @@ filewrite(struct file *f, char *addr, int n)
       if(n1 > max)
         n1 = max;
 
-      begin_op();
-      ilock(f->ip);
-      if ((r = writei(f->ip, addr + i, f->off, n1)) > 0)
+//      begin_op();
+      fat32_ilock(f->ip);
+      if ((r = fat32_writei(f->ip, addr + i, f->off, n1)) > 0)
         f->off += r;
-      iunlock(f->ip);
-      end_op();
+      fat32_iunlock(f->ip);
+//      end_op();
 
       if(r < 0)
         break;

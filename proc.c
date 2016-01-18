@@ -97,7 +97,7 @@ userinit(void)
   p->tf->eip = 0;  // beginning of initcode.S
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
-  p->cwd = namei("/");
+  p->cwd = fat32_namei("/");
 
   p->state = RUNNABLE;
 }
@@ -152,7 +152,7 @@ fork(void)
   for(i = 0; i < NOFILE; i++)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
-  np->cwd = idup(proc->cwd);
+  np->cwd = fat32_idup(proc->cwd);
 
   safestrcpy(np->name, proc->name, sizeof(proc->name));
  
@@ -186,9 +186,9 @@ exit(void)
     }
   }
 
-  begin_op();
-  iput(proc->cwd);
-  end_op();
+//  begin_op();
+  fat32_iput(proc->cwd);
+//  end_op();
   proc->cwd = 0;
 
   acquire(&ptable.lock);
@@ -339,8 +339,8 @@ forkret(void)
     // of a regular process (e.g., they call sleep), and thus cannot 
     // be run from main().
     first = 0;
-    iinit(ROOTDEV);
-    initlog(ROOTDEV);
+    fat32_iinit(ROOTDEV);
+//    initlog(ROOTDEV);
   }
   
   // Return to "caller", actually trapret (see allocproc).

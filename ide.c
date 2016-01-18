@@ -9,7 +9,7 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
-#include "fs.h"
+#include "fat_fs.h"
 #include "buf.h"
 
 #define SECTOR_SIZE   512

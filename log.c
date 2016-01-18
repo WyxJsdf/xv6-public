@@ -55,11 +55,11 @@ initlog(int dev)
   if (sizeof(struct logheader) >= BSIZE)
     panic("initlog: too big logheader");
 
-  struct superblock sb;
+//  struct superblock sb;
   initlock(&log.lock, "log");
-  readsb(dev, &sb);
-  log.start = sb.logstart;
-  log.size = sb.nlog;
+  // readsb(dev, &sb);
+  // log.start = sb.logstart;
+  // log.size = sb.nlog;
   log.dev = dev;
   recover_from_log();
 }

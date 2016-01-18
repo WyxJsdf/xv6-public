@@ -9,7 +9,7 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
-#include "fs.h"
+#include "fat_fs.h"
 #include "buf.h"
 
 extern uchar _binary_fs_img_start[], _binary_fs_img_size[];

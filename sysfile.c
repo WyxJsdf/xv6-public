@@ -10,7 +10,7 @@
 #include "stat.h"
 #include "mmu.h"
 #include "proc.h"
-#include "fs.h"
+#include "fat_fs.h"
 #include "file.h"
 #include "fcntl.h"
 
@@ -112,66 +112,66 @@ sys_fstat(void)
 }
 
 // Create the path new as a link to the same inode as old.
-int
-sys_link(void)
-{
-  char name[DIRSIZ], *new, *old;
-  struct inode *dp, *ip;
+// int
+// sys_link(void)
+// {
+//   char name[DIRSIZ], *new, *old;
+//   struct inode *dp, *ip;
 
-  if(argstr(0, &old) < 0 || argstr(1, &new) < 0)
-    return -1;
+//   if(argstr(0, &old) < 0 || argstr(1, &new) < 0)
+//     return -1;
 
-  begin_op();
-  if((ip = namei(old)) == 0){
-    end_op();
-    return -1;
-  }
+//   begin_op();
+//   if((ip = fat32_namei(old)) == 0){
+//     end_op();
+//     return -1;
+//   }
 
-  ilock(ip);
-  if(ip->type == T_DIR){
-    iunlockput(ip);
-    end_op();
-    return -1;
-  }
+//   fat32_ilock(ip);
+//   if(ip->type == T_DIR){
+//     fat32_iunlockput(ip);
+//     end_op();
+//     return -1;
+//   }
 
-  ip->nlink++;
-  iupdate(ip);
-  iunlock(ip);
+//   ip->nlink++;
+//   fat32_iupdate(ip);
+//   fat32_iunlock(ip);
 
-  if((dp = nameiparent(new, name)) == 0)
-    goto bad;
-  ilock(dp);
-  if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){
-    iunlockput(dp);
-    goto bad;
-  }
-  iunlockput(dp);
-  iput(ip);
+//   if((dp = fat32_nameiparent(new, name)) == 0)
+//     goto bad;
+//   fat32_ilock(dp);
+//   if(dp->dev != ip->dev || fat32_dirlink(dp, name, ip->inum) < 0){
+//     fat32_iunlockput(dp);
+//     goto bad;
+//   }
+//   fat32_iunlockput(dp);
+//   fat32_iput(ip);
 
-  end_op();
+//   end_op();
 
-  return 0;
+//   return 0;
 
-bad:
-  ilock(ip);
-  ip->nlink--;
-  iupdate(ip);
-  iunlockput(ip);
-  end_op();
-  return -1;
-}
+// bad:
+//   fat32_ilock(ip);
+//   ip->nlink--;
+//   fat32_iupdate(ip);
+//   fat32_iunlockput(ip);
+//   end_op();
+//   return -1;
+// }
 
 // Is the directory dp empty except for "." and ".." ?
 static int
 isdirempty(struct inode *dp)
 {
   int off;
-  struct dirent de;
+  struct direntry de;
 
   for(off=2*sizeof(de); off<dp->size; off+=sizeof(de)){
-    if(readi(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
+    if(fat32_readi(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
       panic("isdirempty: readi");
-    if(de.inum != 0)
+    if(de.deName[0] != 0xE5 && de.deName[0] != 0x00)
       return 0;
   }
   return 1;
@@ -182,56 +182,50 @@ int
 sys_unlink(void)
 {
   struct inode *ip, *dp;
-  struct dirent de;
+//  struct dirent de;
   char name[DIRSIZ], *path;
   uint off;
 
   if(argstr(0, &path) < 0)
     return -1;
 
-  begin_op();
-  if((dp = nameiparent(path, name)) == 0){
-    end_op();
+//  begin_op();
+  if((dp = fat32_nameiparent(path, name)) == 0){
+ //   end_op();
     return -1;
   }
 
-  ilock(dp);
+  fat32_ilock(dp);
 
   // Cannot unlink "." or "..".
   if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0)
     goto bad;
 
-  if((ip = dirlookup(dp, name, &off)) == 0)
+  if((ip = fat32_dirlookup(dp, name, &off)) == 0)
     goto bad;
-  ilock(ip);
+  fat32_ilock(ip);
 
   if(ip->nlink < 1)
     panic("unlink: nlink < 1");
   if(ip->type == T_DIR && !isdirempty(ip)){
-    iunlockput(ip);
+    fat32_iunlockput(ip);
     goto bad;
   }
 
-  memset(&de, 0, sizeof(de));
-  if(writei(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
-    panic("unlink: writei");
-  if(ip->type == T_DIR){
-    dp->nlink--;
-    iupdate(dp);
+  fat32_iunlockput(dp);
+  if(ip->inum != 2){
+    fat32_iupdate(dp);
   }
-  iunlockput(dp);
 
   ip->nlink--;
-  iupdate(ip);
-  iunlockput(ip);
-
-  end_op();
+  fat32_iupdate(ip);
+  fat32_iunlockput(ip);
+//  end_op();
 
   return 0;
 
 bad:
-  iunlockput(dp);
-  end_op();
+
   return -1;
 }
 
@@ -242,40 +236,40 @@ create(char *path, short type, short major, short minor)
   struct inode *ip, *dp;
   char name[DIRSIZ];
 
-  if((dp = nameiparent(path, name)) == 0)
+  if((dp = fat32_nameiparent(path, name)) == 0)
     return 0;
-  ilock(dp);
+  fat32_ilock(dp);
 
-  if((ip = dirlookup(dp, name, &off)) != 0){
-    iunlockput(dp);
-    ilock(ip);
+  if((ip = fat32_dirlookup(dp, name, &off)) != 0){
+    fat32_iunlockput(dp);
+    fat32_ilock(ip);
     if(type == T_FILE && ip->type == T_FILE)
       return ip;
-    iunlockput(ip);
+    fat32_iunlockput(ip);
     return 0;
   }
 
-  if((ip = ialloc(dp->dev, type)) == 0)
+  if((ip = fat32_ialloc(dp, type)) == 0)
     panic("create: ialloc");
 
-  ilock(ip);
+  fat32_ilock(ip);
   ip->major = major;
   ip->minor = minor;
   ip->nlink = 1;
-  iupdate(ip);
+  fat32_iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.
-    dp->nlink++;  // for ".."
-    iupdate(dp);
+//    dp->nlink++;  // for ".."
+    fat32_iupdate(dp);
     // No ip->nlink++ for ".": avoid cyclic ref count.
-    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+    if(fat32_dirlink(ip, ".", ip) < 0 || fat32_dirlink(ip, "..", dp) < 0)
       panic("create dots");
   }
 
-  if(dirlink(dp, name, ip->inum) < 0)
+  if(fat32_dirlink(dp, name, ip) < 0)
     panic("create: dirlink");
 
-  iunlockput(dp);
+  fat32_iunlockput(dp);
 
   return ip;
 }
@@ -291,23 +285,23 @@ sys_open(void)
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -1;
 
-  begin_op();
+//  begin_op();
 
   if(omode & O_CREATE){
     ip = create(path, T_FILE, 0, 0);
     if(ip == 0){
-      end_op();
+//      end_op();
       return -1;
     }
   } else {
-    if((ip = namei(path)) == 0){
-      end_op();
+    if((ip = fat32_namei(path)) == 0){
+//      end_op();
       return -1;
     }
-    ilock(ip);
+    fat32_ilock(ip);
     if(ip->type == T_DIR && omode != O_RDONLY){
-      iunlockput(ip);
-      end_op();
+      fat32_iunlockput(ip);
+     // end_op();
       return -1;
     }
   }
@@ -315,12 +309,12 @@ sys_open(void)
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
     if(f)
       fileclose(f);
-    iunlockput(ip);
-    end_op();
+    fat32_iunlockput(ip);
+//    end_op();
     return -1;
   }
-  iunlock(ip);
-  end_op();
+  fat32_iunlock(ip);
+//  end_op();
 
   f->type = FD_INODE;
   f->ip = ip;
@@ -336,13 +330,13 @@ sys_mkdir(void)
   char *path;
   struct inode *ip;
 
-  begin_op();
+//  begin_op();
   if(argstr(0, &path) < 0 || (ip = create(path, T_DIR, 0, 0)) == 0){
-    end_op();
+//    end_op();
     return -1;
   }
-  iunlockput(ip);
-  end_op();
+  fat32_iunlockput(ip);
+//  end_op();
   return 0;
 }
 
@@ -354,16 +348,16 @@ sys_mknod(void)
   int len;
   int major, minor;
   
-  begin_op();
+//  begin_op();
   if((len=argstr(0, &path)) < 0 ||
      argint(1, &major) < 0 ||
      argint(2, &minor) < 0 ||
      (ip = create(path, T_DEV, major, minor)) == 0){
-    end_op();
+ //   end_op();
     return -1;
   }
-  iunlockput(ip);
-  end_op();
+  fat32_iunlockput(ip);
+ // end_op();
   return 0;
 }
 
@@ -373,20 +367,20 @@ sys_chdir(void)
   char *path;
   struct inode *ip;
 
-  begin_op();
-  if(argstr(0, &path) < 0 || (ip = namei(path)) == 0){
-    end_op();
+ // begin_op();
+  if(argstr(0, &path) < 0 || (ip = fat32_namei(path)) == 0){
+  //  end_op();
     return -1;
   }
-  ilock(ip);
+  fat32_ilock(ip);
   if(ip->type != T_DIR){
-    iunlockput(ip);
-    end_op();
+    fat32_iunlockput(ip);
+  //  end_op();
     return -1;
   }
-  iunlock(ip);
-  iput(proc->cwd);
-  end_op();
+  fat32_iunlock(ip);
+  fat32_iput(proc->cwd);
+ // end_op();
   proc->cwd = ip;
   return 0;
 }

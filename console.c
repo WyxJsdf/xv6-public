@@ -7,7 +7,7 @@
 #include "param.h"
 #include "traps.h"
 #include "spinlock.h"
-#include "fs.h"
+#include "fat_fs.h"
 #include "file.h"
 #include "memlayout.h"
 #include "mmu.h"
@@ -235,14 +235,14 @@ consoleread(struct inode *ip, char *dst, int n)
   uint target;
   int c;
 
-  iunlock(ip);
+  fat32_iunlock(ip);
   target = n;
   acquire(&cons.lock);
   while(n > 0){
     while(input.r == input.w){
       if(proc->killed){
         release(&cons.lock);
-        ilock(ip);
+        fat32_ilock(ip);
         return -1;
       }
       sleep(&input.r, &cons.lock);
@@ -262,7 +262,7 @@ consoleread(struct inode *ip, char *dst, int n)
       break;
   }
   release(&cons.lock);
-  ilock(ip);
+  fat32_ilock(ip);
 
   return target - n;
 }
@@ -272,12 +272,12 @@ consolewrite(struct inode *ip, char *buf, int n)
 {
   int i;
 
-  iunlock(ip);
+  fat32_iunlock(ip);
   acquire(&cons.lock);
   for(i = 0; i < n; i++)
     consputc(buf[i] & 0xff);
   release(&cons.lock);
-  ilock(ip);
+  fat32_ilock(ip);
 
   return n;
 }
