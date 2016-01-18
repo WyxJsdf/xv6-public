@@ -18,9 +18,9 @@ exec(char *path, char **argv)
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
 
-  begin_op();
+//  begin_op();
   if((ip = fat32_namei(path)) == 0){
-    end_op();
+    //end_op();
     return -1;
   }
   fat32_ilock(ip);
@@ -50,7 +50,7 @@ exec(char *path, char **argv)
       goto bad;
   }
   fat32_iunlockput(ip);
-  end_op();
+//  end_op();
   ip = 0;
 
   // Allocate two pages at the next page boundary.
@@ -101,7 +101,7 @@ exec(char *path, char **argv)
     freevm(pgdir);
   if(ip){
     fat32_iunlockput(ip);
-    end_op();
+//    end_op();
   }
   return -1;
 }

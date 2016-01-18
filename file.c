@@ -72,9 +72,9 @@ fileclose(struct file *f)
   if(ff.type == FD_PIPE)
     pipeclose(ff.pipe, ff.writable);
   else if(ff.type == FD_INODE){
-    begin_op();
+//    begin_op();
     fat32_iput(ff.ip);
-    end_op();
+//    end_op();
   }
 }
 
@@ -136,12 +136,12 @@ filewrite(struct file *f, char *addr, int n)
       if(n1 > max)
         n1 = max;
 
-      begin_op();
+//      begin_op();
       fat32_ilock(f->ip);
       if ((r = fat32_writei(f->ip, addr + i, f->off, n1)) > 0)
         f->off += r;
       fat32_iunlock(f->ip);
-      end_op();
+//      end_op();
 
       if(r < 0)
         break;

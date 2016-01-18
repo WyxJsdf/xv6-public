@@ -330,13 +330,13 @@ sys_mkdir(void)
   char *path;
   struct inode *ip;
 
-  begin_op();
+//  begin_op();
   if(argstr(0, &path) < 0 || (ip = create(path, T_DIR, 0, 0)) == 0){
-    end_op();
+//    end_op();
     return -1;
   }
   fat32_iunlockput(ip);
-  end_op();
+//  end_op();
   return 0;
 }
 
@@ -348,16 +348,16 @@ sys_mknod(void)
   int len;
   int major, minor;
   
-  begin_op();
+//  begin_op();
   if((len=argstr(0, &path)) < 0 ||
      argint(1, &major) < 0 ||
      argint(2, &minor) < 0 ||
      (ip = create(path, T_DEV, major, minor)) == 0){
-    end_op();
+ //   end_op();
     return -1;
   }
   fat32_iunlockput(ip);
-  end_op();
+ // end_op();
   return 0;
 }
 
@@ -367,20 +367,20 @@ sys_chdir(void)
   char *path;
   struct inode *ip;
 
-  begin_op();
+ // begin_op();
   if(argstr(0, &path) < 0 || (ip = fat32_namei(path)) == 0){
-    end_op();
+  //  end_op();
     return -1;
   }
   fat32_ilock(ip);
   if(ip->type != T_DIR){
     fat32_iunlockput(ip);
-    end_op();
+  //  end_op();
     return -1;
   }
   fat32_iunlock(ip);
   fat32_iput(proc->cwd);
-  end_op();
+ // end_op();
   proc->cwd = ip;
   return 0;
 }

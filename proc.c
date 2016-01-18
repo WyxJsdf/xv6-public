@@ -186,9 +186,9 @@ exit(void)
     }
   }
 
-  begin_op();
+//  begin_op();
   fat32_iput(proc->cwd);
-  end_op();
+//  end_op();
   proc->cwd = 0;
 
   acquire(&ptable.lock);
@@ -340,7 +340,7 @@ forkret(void)
     // be run from main().
     first = 0;
     fat32_iinit(ROOTDEV);
-    initlog(ROOTDEV);
+//    initlog(ROOTDEV);
   }
   
   // Return to "caller", actually trapret (see allocproc).
