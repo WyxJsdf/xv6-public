@@ -21,7 +21,6 @@
 #include "file.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
-static void itrunc(struct inode*);
 struct FAT32_DBR dbr;   // there should be one per dev, but we run with one dev
 
 // Read the super block.
@@ -35,17 +34,13 @@ readDbr(int dev, struct FAT32_DBR *dbr)
 }
 
 // Zero a block.
-static void
-bzero(int dev, int bno)
-{
-}
 
 // Blocks. 
 uint getFATStart(uint cnum, uint *offset)
 {
   uint ret;
   *offset = (cnum * 4);
-  ret = dbr.RsvdSecCnt + (*offset / dbr.BytesPerSec)
+  ret = dbr.RsvdSecCnt + (*offset / dbr.BytesPerSec);
   *offset %= dbr.BytesPerSec;
   return ret;
 }
@@ -54,7 +49,7 @@ void updateFATs(struct buf* sp){
   struct buf *tp;
   int i, offset;
   for (i = 1, offset = dbr.FATSz32; i < dbr.NumFATs; i++, offset += dbr.FATSz32) {
-    tp = bread(sp->dev, sp->sector + offset);
+    tp = bread(sp->dev, sp->blockno + offset);
     memmove(tp->data, sp->data, SECSIZE);
     bwrite(tp);
     brelse(tp);
@@ -63,11 +58,11 @@ void updateFATs(struct buf* sp){
 
 uint getFirstSector(uint cnum)
 {
-  return (cnum - 2) * dbr->SecPerClus + dbr->RsvdSecCnt + dbr->NumFATs * dbr->FATSz32;
+  return (cnum - 2) * dbr.SecPerClus + dbr.RsvdSecCnt + dbr.NumFATs * dbr.FATSz32;
 }
 // Allocate a zeroed disk cluster.
 static uint
-fat32_balloc(uint dev)
+fat32_calloc(uint dev)
 {
   uint cnum, nowSec, lastSec;
   struct buf *bp, *bfsi;
@@ -122,18 +117,18 @@ fat32_balloc(uint dev)
 }
 
 // Free a disk cluster.
-static void
-bfree(int dev, uint cnum)
-{
-    struct buf *bp;
-    uint offset, nowSec;
-    readDbr(dev, &dbr);
-    nowSec = getFATStart(cnum, &offset);
-    bp = bread(dev, nowSec);
-    *(uint *)(bp->data + offset) = 0;
-    bwrite(bp);
-    brelse(bp);
-}
+// static void
+// bfree(int dev, uint cnum)
+// {
+//     struct buf *bp;
+//     uint offset, nowSec;
+//     readDbr(dev, &dbr);
+//     nowSec = getFATStart(cnum, &offset);
+//     bp = bread(dev, nowSec);
+//     *(uint *)(bp->data + offset) = 0;
+//     bwrite(bp);
+//     brelse(bp);
+// }
 
 
 struct {
@@ -151,21 +146,29 @@ fat32_iinit(int dev)
 
 static struct inode* fat32_iget(uint dev, uint inum, uint dirCluster);
 
+struct inode* fat32_ialloc(struct inode *dp, short type){
+    uint cnum = fat32_calloc(dp->dev);
+    struct inode* ip = fat32_iget(dp->dev, cnum, dp->inum);
+    ip->type = type;
+    ip->size = 0;
+   return ip;
+}
+
 void
 fat32_iupdate(struct inode *ip)
 {
   struct buf *bp, *bp1;
   struct direntry *dip;
-  uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec;
+  uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec, i, j;
   
   readDbr(ip->dev, &dbr);
   lastSec = 0;
   do{
     st = getFirstSector(dirCluster);
-    for (i = st; i < st + dbr->SecPerClus; i++){
+    for (i = st; i < st + dbr.SecPerClus; i++){
       bp = bread(ip->dev, i);
-      for (j = bp->data; j < bp->data+SECSIZE; j+=sizeof(direntry)){
-        dip = (struct direntry*)j;
+      for (j = 0; j < SECSIZE; j+=sizeof(struct direntry)){
+        dip = (struct direntry*)(bp->data+j);
         if (((dip->deHighClust << 16)|dip->deLowCluster) == ip->inum){
           dip->deAttributes = (uchar)ip->type;
           dip->deCTime = (ushort)ip->major;
@@ -180,7 +183,7 @@ fat32_iupdate(struct inode *ip)
       }
       brelse(bp);
     }
-    nowSec = getFATStart(dirCluster, offset);
+    nowSec = getFATStart(dirCluster, &offset);
     if (nowSec != lastSec){
       if (bp1)
         brelse(bp1);
@@ -190,7 +193,7 @@ fat32_iupdate(struct inode *ip)
     if (*(uint *)(bp1->data + offset) < LAST_FAT_VALUE)
        dirCluster = *(uint *)(bp1->data + offset);
      else break;
-  }while (true);
+  }while (1);
   panic("update error");
 
 }
@@ -264,10 +267,10 @@ fat32_ilock(struct inode *ip)
     lastSec = 0;
     do{
     st = getFirstSector(dirCluster);
-    for (i = st; i < st + dbr->SecPerClus; i++){
+    for (i = st; i < st + dbr.SecPerClus; i++){
       bp = bread(ip->dev, i);
-      for (j = bp->data; j < bp->data+SECSIZE; j+=sizeof(direntry)){
-        dip = (struct direntry*)j;
+      for (j = 0; j < SECSIZE; j+=sizeof(struct direntry)){
+        dip = (struct direntry*)(bp->data+j);
         if (((dip->deHighClust << 16)|dip->deLowCluster) == ip->inum){
           ip->type = (short)dip->deAttributes;
           ip->major = (short) dip->deCTime;
@@ -285,7 +288,7 @@ fat32_ilock(struct inode *ip)
       }
       brelse(bp);
     }
-    nowSec = getFATStart(dirCluster, offset);
+    nowSec = getFATStart(dirCluster, &offset);
     if (nowSec != lastSec){
       if (bp1)
         brelse(bp1);
@@ -295,7 +298,7 @@ fat32_ilock(struct inode *ip)
     if (*(uint *)(bp1->data + offset) < LAST_FAT_VALUE)
        dirCluster = *(uint *)(bp1->data + offset);
      else break;
-  }while (true);
+  }while (1);
 }
   panic("ilock error");
 }
@@ -313,6 +316,76 @@ fat32_iunlock(struct inode *ip)
   release(&icache.lock);
 }
 
+static void
+fat32_itrunc(struct inode *ip)
+{
+  struct buf *bp, *bp1;
+  struct direntry *dip;
+  struct FSInfo *fsi;
+  uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec, cnum, i, j;
+  readDbr(ip->dev, &dbr);
+
+  lastSec = 0;
+  do{
+    st = getFirstSector(dirCluster);
+    for (i = st; i < st + dbr.SecPerClus; i++){
+      bp = bread(ip->dev, i);
+      for (j = 0; j < SECSIZE; j+=sizeof(struct direntry)){
+        dip = (struct direntry*)(bp->data+j);
+        if (((dip->deHighClust << 16)|dip->deLowCluster) == ip->inum){
+          dip->deName[0] = 0xE5;
+          bwrite(bp);
+          brelse(bp);
+          if (bp1)
+            brelse(bp1);
+          goto handleFAT;
+        }
+      }
+      brelse(bp);
+    }
+    nowSec = getFATStart(dirCluster, &offset);
+    if (nowSec != lastSec){
+      if (bp1)
+        brelse(bp1);
+      bp1 = bread(ip->dev, nowSec);
+      lastSec = nowSec;
+    }
+    if (*(uint *)(bp1->data + offset) < LAST_FAT_VALUE)
+       dirCluster = *(uint *)(bp1->data + offset);
+     else break;
+  }while (1);
+  panic("itrunc error");
+  
+handleFAT:
+  bp1 = bread(ip->dev, dbr.FSInfo);
+  fsi = (struct FSInfo*)bp1->data; 
+  cnum = ip->inum;
+  bp = 0; lastSec = 0;
+  do{
+    nowSec = getFATStart(cnum, &offset);
+    if (nowSec != lastSec){
+      if (bp) {
+        updateFATs(bp);
+        bwrite(bp);
+        brelse(bp);
+      }
+      bp = bread(ip->dev, nowSec);
+      lastSec = nowSec;
+    }
+    cnum = *(uint*)(bp->data + offset);
+    *(uint*)(bp->data + offset) = 0;
+    fsi->Free_Count ++;
+    if (cnum >= LAST_FAT_VALUE) break;
+  } while (1);
+  updateFATs(bp);
+  bwrite(bp);
+  brelse(bp);
+  bwrite(bp1);
+  brelse(bp1);
+  ip->size = 0;
+}
+
+
 void
 fat32_iput(struct inode *ip)
 {
@@ -325,7 +398,7 @@ fat32_iput(struct inode *ip)
     release(&icache.lock);
     fat32_itrunc(ip);
     ip->type = 0;
-    iupdate(ip);
+    fat32_iupdate(ip);
     acquire(&icache.lock);
     ip->flags = 0;
     wakeup(ip);
@@ -343,45 +416,6 @@ fat32_iunlockput(struct inode *ip)
 }
 
 
-static void
-fat32_itrunc(struct inode *ip)
-{
-  struct buf *bp, *bp1;
-  struct direntry *dip;
-  uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec;
-  readDbr(ip->dev, &dbr);
-
-  lastSec = 0;
-  do{
-    st = getFirstSector(dirCluster);
-    for (i = st; i < st + dbr->SecPerClus; i++){
-      bp = bread(ip->dev, i);
-      for (j = bp->data; j < bp->data+SECSIZE; j+=sizeof(direntry)){
-        dip = (struct direntry*)j;
-        if (((dip->deHighClust << 16)|dip->deLowCluster) == ip->inum){
-          dip->deName[0] = 0xE5;
-          bwrite(bp);
-          brelse(bp);
-          if (bp1)
-            brelse(bp1);
-          return;
-        }
-      }
-      brelse(bp);
-    }
-    nowSec = getFATStart(dirCluster, offset);
-    if (nowSec != lastSec){
-      if (bp1)
-        brelse(bp1);
-      bp1 = bread(ip->dev, nowSec);
-      lastSec = nowSec;
-    }
-    if (*(uint *)(bp1->data + offset) < LAST_FAT_VALUE)
-       dirCluster = *(uint *)(bp1->data + offset);
-     else break;
-  }while (true);
-  panic("itrunc error");
-}
 
 // Copy stat information from inode.
 void
@@ -400,13 +434,13 @@ fat32_readi(struct inode *ip, char *dst, uint off, uint n)
   struct buf *bp, *bp1;
   uint nowSec, lastSec, cnum, nowOff = 0, offset, i, st, j, s1, t1;
   readDbr(ip->dev, &dbr);
-  uint tt = (uint)dbr->BytesPerSec * dbr->SecPerClus
+  uint tt = (uint)dbr.BytesPerSec * dbr.SecPerClus;
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].read)
       return -1;
     return devsw[ip->major].read(ip, dst, n);
   }
-  else if (ip->type == T_DIR)
+  if (ip->type == T_DIR)
     n = 32;
   else{
     if(off > ip->size || off + n < off)
@@ -416,21 +450,21 @@ fat32_readi(struct inode *ip, char *dst, uint off, uint n)
   }
   cnum = ip->inum;
   lastSec = 0;
-  while (true){
+  while (1){
     if (nowOff + tt > off){
       st = getFirstSector(cnum);
-      for (i = st, j=nowOff; i < st + dbr->SecPerClus, j < off +n; i++, j+=SECSIZE)
+      for (i = st, j=nowOff; i < st + dbr.SecPerClus && j < off +n; i++, j+=SECSIZE)
         if (j + SECSIZE > off){
           bp = bread(ip->dev, i);
           if (j < off)
             s1 = off - j;
           else s1 = 0;
           if (j + SECSIZE < off + n)
-            s2 = SECSIZE;
-          else s2 = off + n - j;
-          memmove(dst, bp->data+s1, s2-s1);
+            t1 = SECSIZE;
+          else t1 = off + n - j;
+          memmove(dst, bp->data+s1, t1-s1);
           brelse(bp);
-          dst += s2-s1;
+          dst += t1-s1;
         }
       if (j >= off + n){
         if (bp1)
@@ -439,7 +473,7 @@ fat32_readi(struct inode *ip, char *dst, uint off, uint n)
       }
     }
     nowOff += tt;
-    nowSec = getFATStart(cnum, offset);
+    nowSec = getFATStart(cnum, &offset);
     if (nowSec != lastSec){
       if (bp1)
         brelse(bp1);
@@ -452,16 +486,16 @@ fat32_readi(struct inode *ip, char *dst, uint off, uint n)
   }
   if (bp1)
     brelse(bp1);
-  panic("readi error")
+  panic("readi error");
 }
 
 int
 fat32_writei(struct inode *ip, char *src, uint off, uint n)
 {
-  struct buf *bp, bp1;
+  struct buf *bp, *bp1;
   uint nowSec, lastSec, cnum, nowOff = 0, offset, i, st, j, s1, t1;
   readDbr(ip->dev, &dbr);
-  uint tt = (uint)dbr->BytesPerSec * dbr->SecPerClus;
+  uint tt = (uint)dbr.BytesPerSec * dbr.SecPerClus;
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].write)
       return -1;
@@ -472,22 +506,22 @@ fat32_writei(struct inode *ip, char *src, uint off, uint n)
 
   cnum = ip->inum;
   lastSec = 0;
-  while (true){
+  while (1){
     if (off < tt + nowOff){
       st = getFirstSector(cnum);
-      for (i = st, j=nowOff; i < st + dbr->SecPerClus, j < off +n; i++, j+=SECSIZE)
+      for (i = st, j=nowOff; i < st + dbr.SecPerClus && j < off +n; i++, j+=SECSIZE)
         if (j + SECSIZE > off){
           bp = bread(ip->dev, i);
           if (j < off)
             s1 = off - j;
           else s1 = 0;
           if (j + SECSIZE < off + n)
-            s2 = SECSIZE;
-          else s2 = off + n - j;
-          memmove(bp->data+s1, dst, s2-s1);
+            t1 = SECSIZE;
+          else t1 = off + n - j;
+          memmove(bp->data+s1, src, t1-s1);
           bwrite(bp);
           brelse(bp);
-          dst += s2-s1;
+          src += t1-s1;
         }
       if (j >= off + n){
         if (bp1){
@@ -503,7 +537,7 @@ fat32_writei(struct inode *ip, char *src, uint off, uint n)
       }
     }
     nowOff += tt;
-    nowSec = getFATStart(cnum, offset);
+    nowSec = getFATStart(cnum, &offset);
     if (nowSec != lastSec){
       if (bp1){
         updateFATs(bp1);
@@ -516,7 +550,7 @@ fat32_writei(struct inode *ip, char *src, uint off, uint n)
     if (*(uint *)(bp1->data + offset) < LAST_FAT_VALUE)
        cnum = *(uint *)(bp1->data + offset);
      else{
-        cnum = fat32_balloc(ip->dev);
+        cnum = fat32_calloc(ip->dev);
         *(uint *)(bp1->data + offset) = cnum;
      }
   }
@@ -534,35 +568,130 @@ namecmp(const char *s, const char *t)
 // Look for a directory entry in a directory.
 // If found, set *poff to byte offset of entry.
 struct inode*
-dirlookup(struct inode *dp, char *name, uint *poff)
+fat32_dirlookup(struct inode *dp, char *name, uint *poff)
 {
-}
+  uint off, cnum;
+  struct direntry dip;
+
+  if(dp->type != T_DIR)
+    panic("dirlookup not DIR");  
+
+  for(off = 0; off < dp->size; off += sizeof(dip)){
+    if(fat32_readi(dp, (char*)&dip, off, sizeof(dip)) != sizeof(dip))
+      panic("dirlink read");
+//    if(dip.inum == 0)
+ //     continue;
+    if(namecmp(name, (char*)dip.deName) == 0){
+      // entry matches path element
+      if(poff)
+        *poff = off;
+      cnum = (dip.deHighClust << 16) | dip.deLowCluster;
+      return fat32_iget(dp->dev, cnum, dp->inum);
+    }
+  }
+  return 0;
+} 
 
 // Write a new directory entry (name, inum) into the directory dp.
 int
-dirlink(struct inode *dp, char *name, uint inum)
+fat32_dirlink(struct inode *dp, char *name, struct inode*dp1)
 {
+  int off;
+  struct direntry de;
+  struct inode *ip;
+
+  // Check that name is not present.
+  if((ip = fat32_dirlookup(dp, name, 0)) != 0){
+    fat32_iput(ip);
+    return -1;
+  }
+
+  // Look for an empty dirent.
+  for(off = 0; off < dp->size; off += sizeof(de)){
+    if(fat32_readi(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlink read");
+    if(de.deName[0] == 0xE5)
+      break;
+  }
+
+  strncpy((char*)de.deName, name, DIRSIZ);
+  de.deHighClust = dp1->inum >> 16;
+  de.deLowCluster = dp1->inum & 0xffff;
+  de.deFileSize = dp1->size;
+  if(fat32_writei(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
+    panic("dirlink");
+  return 0;
 }
 
 static char*
 skipelem(char *path, char *name)
 {
+  char *s;
+  int len;
+
+  while(*path == '/')
+    path++;
+  if(*path == 0)
+    return 0;
+  s = path;
+  while(*path != '/' && *path != 0)
+    path++;
+  len = path - s;
+  if(len >= DIRSIZ)
+    memmove(name, s, DIRSIZ);
+  else {
+    memmove(name, s, len);
+    name[len] = 0;
+  }
+  while(*path == '/')
+    path++;
+  return path;
 }
 
 static struct inode*
-namex(char *path, int nameiparent, char *name)
+fat32_namex(char *path, int nameiparent, char *name)
 {
+  struct inode *ip, *next;
+
+  if(*path == '.'){
+    ip = proc->cwd;
+    if (ip->inum == 2)
+      path++;
+   }
+  while((path = skipelem(path, name)) != 0){
+    fat32_ilock(ip);
+    if(ip->type != T_DIR){
+      fat32_iunlockput(ip);
+      return 0;
+    }
+    if(nameiparent && *path == '\0'){
+      // Stop one level early.
+      fat32_iunlock(ip);
+      return ip;
+    }
+    if((next = fat32_dirlookup(ip, name, 0)) == 0){
+      fat32_iunlockput(ip);
+      return 0;
+    }
+    fat32_iunlockput(ip);
+    ip = next;
+  }
+  if(nameiparent){
+    fat32_iput(ip);
+    return 0;
+  }
+  return ip;
 }
 
 struct inode*
-namei(char *path)
+fat32_namei(char *path)
 {
   char name[DIRSIZ];
-  return namex(path, 0, name);
+  return fat32_namex(path, 0, name);
 }
 
 struct inode*
-nameiparent(char *path, char *name)
+fat32_nameiparent(char *path, char *name)
 {
-  return namex(path, 1, name);
+  return fat32_namex(path, 1, name);
 }

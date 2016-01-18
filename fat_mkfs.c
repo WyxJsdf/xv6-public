@@ -267,8 +267,8 @@ struct direntry mkFCB(uchar type, char *name, int size, uint *clusNum)
 {
   char buf[4] = {0xff,0xff,0xff,0xff};
   struct direntry de;
-  strncpy((char*)(de.deName), name, 8);
-  memset(de.deExtension, 0, sizeof(de.deExtension));
+  strncpy((char*)(de.deName), name, 11);
+//  memset(de.deExtension, 0, sizeof(de.deExtension));
   de.deAttributes = type;
   // 文件创建时间和日期
   de.deCTime = combineUchar(getHour(), getMinute());

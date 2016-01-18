@@ -1,7 +1,7 @@
 #include "types.h"
 #include "stat.h"
 #include "user.h"
-#include "fs.h"
+#include "fat_fs.h"
 
 char*
 fmtname(char *path)
@@ -27,7 +27,7 @@ ls(char *path)
 {
   char buf[512], *p;
   int fd;
-  struct dirent de;
+  struct direntry de;
   struct stat st;
   
   if((fd = open(path, 0)) < 0){
@@ -55,9 +55,9 @@ ls(char *path)
     p = buf+strlen(buf);
     *p++ = '/';
     while(read(fd, &de, sizeof(de)) == sizeof(de)){
-      if(de.inum == 0)
+      if(de.deName[0] == 0 || de.deName[0] == 0xE5)
         continue;
-      memmove(p, de.name, DIRSIZ);
+      memmove(p, de.deName, DIRSIZ);
       p[DIRSIZ] = 0;
       if(stat(buf, &st) < 0){
         printf(1, "ls: cannot stat %s\n", buf);

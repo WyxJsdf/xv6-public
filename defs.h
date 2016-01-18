@@ -33,24 +33,25 @@ int             fileread(struct file*, char*, int n);
 int             filestat(struct file*, struct stat*);
 int             filewrite(struct file*, char*, int n);
 
-// fs.c
-void            readsb(int dev, struct superblock *sb);
-int             dirlink(struct inode*, char*, uint);
-struct inode*   dirlookup(struct inode*, char*, uint*);
-struct inode*   ialloc(uint, short);
-struct inode*   idup(struct inode*);
-void            iinit(int dev);
-void            ilock(struct inode*);
-void            iput(struct inode*);
-void            iunlock(struct inode*);
-void            iunlockput(struct inode*);
-void            iupdate(struct inode*);
+// fat_fs.c
+//void            readDbr(int dev, struct FAT32_DBR *);
+int             fat32_dirlink(struct inode*, char*, struct inode*);
+struct inode*   fat32_dirlookup(struct inode*, char*, uint*);
+struct inode*   fat32_ialloc(struct inode*, short);
+struct inode*   fat32_idup(struct inode*);
+//struct inode* fat32_ialloc(struct inode*, short);
+void            fat32_iinit(int dev);
+void            fat32_ilock(struct inode*);
+void            fat32_iput(struct inode*);
+void            fat32_iunlock(struct inode*);
+void            fat32_iunlockput(struct inode*);
+void            fat32_iupdate(struct inode*);
 int             namecmp(const char*, const char*);
-struct inode*   namei(char*);
-struct inode*   nameiparent(char*, char*);
-int             readi(struct inode*, char*, uint, uint);
-void            stati(struct inode*, struct stat*);
-int             writei(struct inode*, char*, uint, uint);
+struct inode*   fat32_namei(char*);
+struct inode*   fat32_nameiparent(char*, char*);
+int             fat32_readi(struct inode*, char*, uint, uint);
+void            fat32_stati(struct inode*, struct stat*);
+int             fat32_writei(struct inode*, char*, uint, uint);
 
 // ide.c
 void            ideinit(void);

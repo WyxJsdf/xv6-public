@@ -19,15 +19,15 @@ exec(char *path, char **argv)
   pde_t *pgdir, *oldpgdir;
 
   begin_op();
-  if((ip = namei(path)) == 0){
+  if((ip = fat32_namei(path)) == 0){
     end_op();
     return -1;
   }
-  ilock(ip);
+  fat32_ilock(ip);
   pgdir = 0;
 
   // Check ELF header
-  if(readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf))
+  if(fat32_readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf))
     goto bad;
   if(elf.magic != ELF_MAGIC)
     goto bad;
@@ -38,7 +38,7 @@ exec(char *path, char **argv)
   // Load program into memory.
   sz = 0;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
-    if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
+    if(fat32_readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;
     if(ph.type != ELF_PROG_LOAD)
       continue;
@@ -49,7 +49,7 @@ exec(char *path, char **argv)
     if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0)
       goto bad;
   }
-  iunlockput(ip);
+  fat32_iunlockput(ip);
   end_op();
   ip = 0;
 
@@ -100,7 +100,7 @@ exec(char *path, char **argv)
   if(pgdir)
     freevm(pgdir);
   if(ip){
-    iunlockput(ip);
+    fat32_iunlockput(ip);
     end_op();
   }
   return -1;
