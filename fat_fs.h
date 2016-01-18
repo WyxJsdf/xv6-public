@@ -1,9 +1,8 @@
-#ifndef FAT_FS_H
-#define FAT_FS_H
-
 #define SECSIZE    512  // sector size (bytes) 单个扇区字节数
 #define SECPERCLUS   8  // number of sector per cluster 每簇扇区数
 #define RETAINSEC    2  // number of retain sectors 保留扇区个数
+#define NDIRECT     12  // ?
+#define FNSIZE      14
 
 struct FAT32_DBR
 {
@@ -47,7 +46,7 @@ struct FSInfo
   uint TrailSig;		//结束标记表示是一个FSInfo扇区
 };
 
-struct direntry
+typedef struct direntry
 {
    uchar deName[8];       // 文件名
    uchar deExtension[3];    // 扩展名
@@ -62,7 +61,7 @@ struct direntry
    ushort deMDate;           // 文件的最近修改日期
    ushort deLowCluster;//　文件起始簇号的低16 位
    uint deFileSize;   // 表示文件的长度
-};
+} DIR;
 
 struct finode {
   short type;           // File type

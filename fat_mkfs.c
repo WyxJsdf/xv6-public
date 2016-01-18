@@ -7,19 +7,16 @@
 
 #define stat xv6_stat  // avoid clash with host struct stat
 #include "types.h"
+#include "param.h"
 #include "fat_fs.h"
 #include "stat.h"
-#include "param.h"
-#include "x86.h"
+
 
 #ifndef static_assert
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
 #endif
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
-#define FNSIZE 14
-
-typedef struct direntry DIR
 
 // Disk layout:
 // [ DBR sector | retain sector | FAT sectors | data sectors ]
@@ -27,18 +24,18 @@ typedef struct direntry DIR
 int nDBR = 1;     // number of DBR sector DBR占有扇区数
 int nRetain = RETAINSEC;  // number of retain sectors 保留扇区数
 // number of a FAT sectors 单个FAT表所占扇区数
-int nFAT = ((FSSIZE - nDBR - nRetain) * 4 + SECPERCLUS + SECSIZE) / (SECSIZE + 8/SECPERCLUS);
-int nData = FSSIZE - nDBR - nRetain - 2 * nFAT; // number of data sectors 数据扇区数
-int nDataClus = nData / SECPERCLUS; // 簇数量
+int nFAT;
+int nData; // number of data sectors 数据扇区数
+int nDataClus; // 簇数量
 
 int fsfd; // fs.img的fd
 struct FAT32_DBR fatDBR;
 struct FSInfo fsi;
-uint fatFstSec = nDBR + nRetain;  // FAT表起始扇区号
-uint fatTmpFstSec = fatFstSec + nFAT; // FAT备份表起始扇区号
+uint fatFstSec;  // FAT表起始扇区号
+uint fatTmpFstSec; // FAT备份表起始扇区号
 uint freeClusIdx = 2; // FAT表中空闲位置的index(以4字节为单位)
 uint freeClusNum = 0; // 空闲簇号
-uint fstClusSec = nDBR + nRetain + nFAT * 2;  // 第一个簇对应的第一个扇区号
+uint fstClusSec;  // 第一个簇对应的第一个扇区号
 
 /*
 * 函数功能：向sec号扇区写入数据buf
@@ -68,21 +65,24 @@ void czero(uint clus);
 */
 void appendBuf(uint clus, void *buf, int size, int curWSize);
 /* 函数功能：时间获取函数*/
+/*
 uchar getSecond();
 uchar getMinute();
 uchar getHour();
 uchar getDay();
 uchar getMonth();
 uchar getYear();
+*/
 /* 函数功能: 初始化函数 */
 void initDBR();
 void initFSI();
+void initDat();
 // 
 void wsect4bytes(uint sec, uint index, void *buf);
 void rsect4bytes(uint sec, uint index, void *buf);
 void wsectnbytes(uint sec, uint index, void *buf, int wn);
-struct direntry mkFCB(uchar type, uchar *name, int size, uint *clusNum);
-uint retFileSize(uchar* filename);
+struct direntry mkFCB(uchar type, char *name, int size, uint *clusNum);
+uint retFileSize(char* filename);
 // convert to intel byte order
 ushort xshort(ushort x);
 uint xint(uint x);
@@ -91,7 +91,7 @@ uint xint(uint x);
 int main(int argc, char *argv[])
 {
   // 局部变量
-  uchar buf[SECSIZE];
+  char buf[SECSIZE];
 //  uchar fatStartContent[8] = {0xf8,0xff,0xff,0x0f,0xff,0xff,0xff,0xff};
   struct direntry dire;
   uint dirClusNum;  // 为文件分配的簇号
@@ -100,7 +100,8 @@ int main(int argc, char *argv[])
   uint cc, fd;  // cc一次读取文件的字节数，打开文件的fd
   int rootWSize = 0;  // 已向根目录写入的字节数
   int fileWSize = 0;  // 已向文件中写入的字节数
-  uchar filename[FNSIZE]; // 文件名
+  char filename[FNSIZE]; // 文件名
+  int i;
 
   static_assert(sizeof(int) == 4, "Integers must be 4 bytes!");
 
@@ -108,6 +109,8 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Usage: mkfs fs.img files...\n");
     exit(1);
   }
+
+  initDat();
 
   // 是否有需要断言
   // ?
@@ -199,7 +202,7 @@ int main(int argc, char *argv[])
   exit(0);
 }
 
-void　wsect(uint sec, void *buf)
+void wsect(uint sec, void *buf)
 {
   if(lseek(fsfd, sec * SECSIZE, 0) != sec * SECSIZE){
     perror("lseek");
@@ -211,7 +214,7 @@ void　wsect(uint sec, void *buf)
   }
 }
 
-void　rsect(uint sec, void *buf)
+void rsect(uint sec, void *buf)
 {
   if(lseek(fsfd, sec * SECSIZE, 0) != sec * SECSIZE){
     perror("lseek");
@@ -244,13 +247,13 @@ void czero(uint clus)
   }
 }
 
-uint retFileSize(uchar* filename)
+uint retFileSize(char* filename)
 {
   uint fd;
   uint fs = 0;
   uint cc = 0;
-  uchar buf[SECSIZE];
-  if((fd = open(filename, , 0)) < 0) {
+  char buf[SECSIZE];
+  if((fd = open(filename, 0)) < 0) {
     return -1;
   }
   while((cc = read(fd, buf, sizeof(buf))) > 0) {
@@ -260,11 +263,11 @@ uint retFileSize(uchar* filename)
   return fs;
 }
 
-struct direntry mkFCB(uchar type, uchar *name, int size, uint *clusNum)
+struct direntry mkFCB(uchar type, char *name, int size, uint *clusNum)
 {
   char buf[4] = {0xff,0xff,0xff,0xff};
   struct direntry de;
-  strncpy(de.deName, name, 8);
+  strncpy((char*)(de.deName), name, 8);
   memset(de.deExtension, 0, sizeof(de.deExtension));
   de.deAttributes = type;
   // 文件创建时间和日期
@@ -319,7 +322,7 @@ uint cnallloc()
       }
     }
     freeClusNum++;
-    if (temp = 0) {
+    if (temp == 0) {
       return freeClusNum;
     }
   }
@@ -330,7 +333,6 @@ uint fatidxalloc()
 {
   uint fatStart = fatFstSec;
   uint numOf4Bytes = (SECSIZE * nFAT / 4 - 8);
-  int i, j;
   char buf[4];
   rsect4bytes(fatStart, freeClusIdx, buf);
   if(buf[0] == 0 && buf[1] == 0 && buf[2] == 0 && buf[3] == 0) {
@@ -370,7 +372,7 @@ void wsectnbytes(uint sec, uint index, void *buf, int wn)
 void appendBuf(uint clus, void *buf, int size, int curWSize)
 {
   uint expandClusNo = -1; // 下一个簇号
-  uchar nextClus[4];  // 下一个簇号
+  uchar *nextClus;  // 下一个簇号
   uint clusBytes = SECPERCLUS * SECSIZE;  // 单个簇字节数
   uint curClus = clus + (curWSize / clusBytes); // 需要向curClus簇内写入内容
   uint offSec = (curWSize % clusBytes) / SECSIZE; // 取值范围：[0,1...SECPERCLUS)
@@ -421,9 +423,22 @@ void initFSI()
   // fsi结束标记
 }
 
+void initDat()
+{
+  // number of a FAT sectors 单个FAT表所占扇区数
+  nFAT = ((FSSIZE - nDBR - nRetain) * 4 + SECPERCLUS + SECSIZE) / (SECSIZE + 8/SECPERCLUS);
+  nData = FSSIZE - nDBR - nRetain - 2 * nFAT; // number of data sectors 数据扇区数
+  nDataClus = nData / SECPERCLUS; // 簇数量
+
+  fatFstSec = nDBR + nRetain;  // FAT表起始扇区号
+  fatTmpFstSec = fatFstSec + nFAT; // FAT备份表起始扇区号
+  fstClusSec = nDBR + nRetain + nFAT * 2;  // 第一个簇对应的第一个扇区号
+}
+
+/*
 uchar getSecond()
 {
-  uchar data;
+  uchar data = 0;
   outb(0x70, 0x00);
   data = inb(0x71);
   return (data >> 4) * 10 + (data & 0xf);
@@ -468,6 +483,7 @@ uchar getYear()
   data = inb(0x71);
   return (data >> 4) * 10 + (data & 0xf);
 }
+*/
 
 ushort xshort(ushort x)
 {
