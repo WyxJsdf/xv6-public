@@ -24,8 +24,7 @@
 
 int nDBR = 1;     // number of DBR sector DBR占有扇区数
 int nRetain = RETAINSEC;  // number of retain sectors 保留扇区数
-// number of a FAT sectors 单个FAT表所占扇区数
-int nFAT;
+int nFAT; // number of a FAT sectors 单个FAT表所占扇区数
 int nData; // number of data sectors 数据扇区数
 int nDataClus; // 簇数量
 
@@ -35,7 +34,7 @@ struct FSInfo fsi;
 uint fatFstSec;  // FAT表起始扇区号
 uint fatTmpFstSec; // FAT备份表起始扇区号
 uint freeClusIdx = 2; // FAT表中空闲位置的index(以4字节为单位)
-uint freeClusNum = 0; // 空闲簇号
+uint freeClusNum = 2; // 空闲簇号
 uint fstClusSec;  // 第一个簇对应的第一个扇区号
 
 /*
@@ -55,7 +54,7 @@ void rsect(uint sec, void *buf);
 uint clus2sec(uint clus);
 /* 函数功能：分配空闲簇号(在FAT表中查找) */
 uint cnallloc();
-/* 函数功能：分配FAT表中空闲位置 */
+/* 函数功能：分配FAT表中空闲位置 */ //=======没有用到==========
 uint fatidxalloc();
 /* 清零扇区和簇 */
 void szero(uint sec);
@@ -75,6 +74,7 @@ uchar getYear();
 /* 函数功能: 初始化函数 */
 void initDBR();
 void initFSI();
+// 初始化全局变量
 void initDat();
 // 
 void wsect4bytes(uint sec, uint index, void *buf);
@@ -92,7 +92,8 @@ int main(int argc, char *argv[])
 {
   // 局部变量
   char buf[SECSIZE];
-//  uchar fatStartContent[8] = {0xf8,0xff,0xff,0x0f,0xff,0xff,0xff,0xff};
+  // FAT表表头标记
+  uchar fatStartContent[8] = {0xf8,0xff,0xff,0x0f,0xff,0xff,0xff,0xff};
   struct direntry dire;
   uint dirClusNum;  // 为文件分配的簇号
   uint wClusNum;  // 根目录簇号
@@ -121,9 +122,6 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  // 初始化DBR,FSI
-  initDBR();
-  initFSI();
   printf("DBR : %d, retain sectors: %d, FAT sector: %d, 2 FATs, data sectors: %d, clusters: %d", 
     nDBR, nRetain, nFAT, nData, nDataClus);
 
@@ -131,17 +129,15 @@ int main(int argc, char *argv[])
   for(i = 0; i < FSSIZE; i++)
     szero(i);
 
-  // 写入DBR,FSI
+  // 向第0扇区写入DBR
+  initDBR();
   memset(buf, 0, sizeof(buf));
   memmove(buf, &fatDBR, sizeof(fatDBR));
   wsect(0, buf);
-  memset(buf, 0, sizeof(buf));
-  memmove(buf, &fsi, sizeof(fsi));
-  wsect(1, buf);
 
-  // // 写入FAT表头标记
-  // rsect4bytes(fatFstSec, 0, fatStartContent);
-  // rsect4bytes(fatFstSec, 1, fatStartContent + 4);
+  // 写入FAT表头标记
+  rsect4bytes(fatFstSec, 0, fatStartContent);
+  rsect4bytes(fatFstSec, 1, fatStartContent + 4);
 
   // 写入根目录
   dire = mkFCB(T_DIR, "/", sizeof(DIR)*argc, &dirClusNum);
@@ -190,15 +186,23 @@ int main(int argc, char *argv[])
     close(fd);
   }
 
+  // 向第1扇区写入FSI
+  initFSI();
+  memset(buf, 0, sizeof(buf));
+  memmove(buf, &fsi, sizeof(fsi));
+  wsect(1, buf);
+  // 向备份FAT中写入相同的内容
+  for(i = fatFstSec; i < fatFstSec + nFAT; i++) {
+    rsect(i, buf);
+    wsect((i+nFAT), buf);
+  }
   // // fix size of root inode dir
   // rinode(rootino, &din);
   // off = xint(din.size);
   // off = ((off/BSIZE) + 1) * BSIZE;
   // din.size = xint(off);
   // winode(rootino, &din);
-
   // balloc(freeblock);
-
   exit(0);
 }
 
@@ -311,23 +315,36 @@ void rsect4bytes(uint sec, uint index, void *buf)
 
 uint cnallloc()
 {
-  uint sect;
-  char buf[SECSIZE];
-  int i, temp;
+  char buf[4];
+  int i, temp, curFreeClusNum = freeClusNum;
   while(freeClusNum < nDataClus) {
     temp = 0;
-    sect = clus2sec(freeClusNum);
-    rsect(sect, buf);
-    for(i = 0; i < SECSIZE; i++) {
+    rsect4bytes(fatFstSec, freeClusNum, buf);
+    for(i = 0; i < 4; i++) {
       if(buf[i] != 0) {
         temp = 1;
         break;
       }
     }
-    freeClusNum++;
     if (temp == 0) {
-      return freeClusNum;
+      return freeClusNum++;
     }
+    freeClusNum++;
+  }
+  freeClusNum = 2;
+  while(freeClusNum < curFreeClusNum) {
+    temp = 0;
+    rsect4bytes(fatFstSec, freeClusNum, buf);
+    for(i = 0; i < 4; i++) {
+      if(buf[i] != 0) {
+        temp = 1;
+        break;
+      }
+    }
+    if (temp == 0) {
+      return freeClusNum++;
+    }
+    freeClusNum++;
   }
   return -1;
 }
@@ -382,6 +399,7 @@ void appendBuf(uint clus, void *buf, int size, int curWSize)
   uint curSec = clus2sec(curClus) + offSec;
   uint hasWBytes = (curWSize % clusBytes) % SECSIZE;
   uint leaveBytes = SECSIZE - hasWBytes; // 该扇区剩余的空闲字节数
+  char fileEnd[4] = {0xff,0xff,0xff,0xff}; // -1
   // priority 1: 是否需要扩展簇？
   if(size + (curWSize % clusBytes) > clusBytes) {
     expandClusNo = cnallloc();
@@ -391,6 +409,7 @@ void appendBuf(uint clus, void *buf, int size, int curWSize)
     nextClus[2] = expandClusNo >> 16;
     nextClus[3] = expandClusNo >> 24;
     rsect4bytes(fatFstSec, curClus, nextClus);
+    rsect4bytes(fatFstSec, expandClusNo, fileEnd);
   }
   // 向簇中写入buf
   while(size > 0) {
@@ -423,6 +442,7 @@ void initFSI()
   fsi.LeadSig    = xint(nDBR);
   fsi.Free_Count = xint(nDataClus);
   fsi.Nxt_Free   = xint(0);
+  fsi.Nxt_Free   = xint(freeClusNum+1);
   // fsi结束标记
 }
 
