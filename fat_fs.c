@@ -165,7 +165,7 @@ void
 fat32_iupdate(struct inode *ip)
 {
     // cprintf("debug7\n" );
-  struct buf *bp, *bp1;
+  struct buf *bp, *bp1 = 0;
   struct direntry *dip;
   uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec, i, j;
   if (ip->inum == 2)
@@ -255,7 +255,7 @@ void
 fat32_ilock(struct inode *ip)
 {
      cprintf("debug10\n" );
-  struct buf *bp, *bp1;
+  struct buf *bp, *bp1 = 0;
   struct direntry *dip;
   uint dirCluster = ip->dirCluster, st, i,j, nowSec, offset, lastSec;
 
@@ -272,6 +272,10 @@ fat32_ilock(struct inode *ip)
     ip->type = T_DIR;
     ip->nlink = 1;
     ip->flags |= I_VALID;
+    bp = bread(ip->dev, getFirstSector(2));
+    dip = (struct direntry*)bp->data;
+    ip->size = dip->deFileSize;
+    brelse(bp);
     return;
   }
   if(!(ip->flags & I_VALID)){
@@ -333,7 +337,7 @@ static void
 fat32_itrunc(struct inode *ip)
 {
     // cprintf("debug12\n" );
-  struct buf *bp, *bp1;
+  struct buf *bp, *bp1 = 0;
   struct direntry *dip;
   struct FSInfo *fsi;
   uint dirCluster = ip->dirCluster, st, nowSec, offset, lastSec, cnum, i, j;
@@ -448,7 +452,8 @@ int
 fat32_readi(struct inode *ip, char *dst, uint off, uint n)
 {
     // cprintf("debug15\n" );
-  struct buf *bp, *bp1;
+      cprintf("hahaha\n");
+  struct buf *bp, *bp1 = 0;
   uint nowSec, lastSec, cnum, nowOff = 0, offset, i, st, j, s1, t1;
   readDbr(ip->dev, &dbr);
   uint tt = (uint)dbr.BytesPerSec * dbr.SecPerClus;
@@ -510,7 +515,7 @@ int
 fat32_writei(struct inode *ip, char *src, uint off, uint n)
 {
     // cprintf("debug16\n" );
-  struct buf *bp, *bp1;
+  struct buf *bp, *bp1 = 0;
   uint nowSec, lastSec, cnum, nowOff = 0, offset, i, st, j, s1, t1;
   readDbr(ip->dev, &dbr);
   uint tt = (uint)dbr.BytesPerSec * dbr.SecPerClus;
@@ -588,18 +593,19 @@ namecmp(const char *s, const char *t)
 struct inode*
 fat32_dirlookup(struct inode *dp, char *name, uint *poff)
 {
-     cprintf("debug17\n" );
+     cprintf("debug17 size = %d inum = %d\n", dp->size, dp->inum );
   uint off, cnum;
   struct direntry dip;
 
   if(dp->type != T_DIR)
     panic("dirlookup not DIR");  
-
-  for(off = 0; off < dp->size; off += sizeof(dip)){
+    cprintf("haha\n");
+ for(off = 0; off < dp->size; off += sizeof(dip)){
     if(fat32_readi(dp, (char*)&dip, off, sizeof(dip)) != sizeof(dip))
       panic("dirlink read");
 //    if(dip.inum == 0)
  //     continue;
+    cprintf("dedede %s\n", dip.deName);
     if(namecmp(name, (char*)dip.deName) == 0){
       // entry matches path element
       if(poff)
