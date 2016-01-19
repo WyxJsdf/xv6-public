@@ -232,7 +232,7 @@ void rsect(uint sec, void *buf)
 
 uint clus2sec(uint clus)
 {
-  return (fstClusSec + clus * SECPERCLUS);
+  return (fstClusSec + (clus - 2) * SECPERCLUS);
 }
 
 void szero(uint sec)
