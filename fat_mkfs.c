@@ -281,7 +281,7 @@ struct direntry mkFCB(uchar type, char *name, int size, uint *clusNum)
   *clusNum = cnallloc();
   de.deHighClust = (ushort)((*clusNum) >> 16);
   de.deLowCluster = (ushort)(*clusNum);
-  rsect4bytes(fatFstSec, *clusNum, buf);
+  wsect4bytes(fatFstSec, *clusNum, buf);
   return de;
 }
 
@@ -407,8 +407,8 @@ void appendBuf(uint clus, void *buf, int size, int curWSize)
     nextClus[1] = expandClusNo >> 8;
     nextClus[2] = expandClusNo >> 16;
     nextClus[3] = expandClusNo >> 24;
-    rsect4bytes(fatFstSec, curClus, nextClus);
-    rsect4bytes(fatFstSec, expandClusNo, fileEnd);
+    wsect4bytes(fatFstSec, curClus, nextClus);
+    wsect4bytes(fatFstSec, expandClusNo, fileEnd);
   }
   // 向簇中写入buf
   while(size > 0) {
