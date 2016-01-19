@@ -384,7 +384,7 @@ void wsectnbytes(uint sec, uint index, void *buf, int wn)
     exit(1);
   }
   if(write(fsfd, buf, wn) != wn) {
-    perror("write4Bytes.");
+    perror("writenBytes.");
     exit(1);
   }
 }
@@ -400,6 +400,7 @@ void appendBuf(uint clus, void *buf, int size, int curWSize)
   uint hasWBytes = (curWSize % clusBytes) % SECSIZE;
   uint leaveBytes = SECSIZE - hasWBytes; // 该扇区剩余的空闲字节数
   char fileEnd[4] = {0xff,0xff,0xff,0xff}; // -1
+  uint shouldWrite = min(size, leaveBytes);
   // priority 1: 是否需要扩展簇？
   if(size + (curWSize % clusBytes) > clusBytes) {
     expandClusNo = cnallloc();
@@ -413,13 +414,18 @@ void appendBuf(uint clus, void *buf, int size, int curWSize)
   }
   // 向簇中写入buf
   while(size > 0) {
-    wsectnbytes(curSec, hasWBytes, buf, leaveBytes);
-    buf += leaveBytes;
-    size -= leaveBytes;
-    curSec = (offSec + 1 >= SECPERCLUS) ? (clus2sec(expandClusNo)) : (curSec + 1);
-    offSec = (offSec + 1 >= SECPERCLUS) ? (0) : (offSec + 1);
-    hasWBytes = 0;
-    leaveBytes = SECPERCLUS;
+    wsectnbytes(curSec, hasWBytes, buf, shouldWrite);
+    buf += shouldWrite;
+    size -= shouldWrite;
+    leaveBytes -= shouldWrite;
+    hasWBytes = (hasWBytes + shouldWrite) % SECSIZE;
+    if (leaveBytes == 0) {
+      curSec = (offSec + 1 >= SECPERCLUS) ? (clus2sec(expandClusNo)) : (curSec + 1);
+      offSec = (offSec + 1 >= SECPERCLUS) ? (0) : (offSec + 1);
+      hasWBytes = 0;
+      leaveBytes = SECPERCLUS;
+    }
+    shouldWrite = min(size, leaveBytes);
   }
 }
 
