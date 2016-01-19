@@ -390,7 +390,7 @@ void wsectnbytes(uint sec, uint index, void *buf, int wn)
 void appendBuf(uint clus, void *buf, int size, int curWSize)
 {
   uint expandClusNo = -1; // 下一个簇号
-  uchar *nextClus;  // 下一个簇号
+  uchar nextClus[4];  // 下一个簇号
   uint clusBytes = SECPERCLUS * SECSIZE;  // 单个簇字节数
   uint curClus = clus + (curWSize / clusBytes); // 需要向curClus簇内写入内容
   uint offSec = (curWSize % clusBytes) / SECSIZE; // 取值范围：[0,1...SECPERCLUS)
@@ -401,8 +401,7 @@ void appendBuf(uint clus, void *buf, int size, int curWSize)
   uint shouldWrite = min(size, leaveBytes);
   // priority 1: 是否需要扩展簇？
   if(size + (curWSize % clusBytes) > clusBytes) {
-    expandClusNo = cnallloc();
-    nextClus = (uchar*)(&expandClusNo);
+    while(expandClusNo == -1){ expandClusNo = cnallloc(); }
     nextClus[0] = expandClusNo;
     nextClus[1] = expandClusNo >> 8;
     nextClus[2] = expandClusNo >> 16;
@@ -445,7 +444,6 @@ void initFSI()
 {
   fsi.LeadSig    = xint(nDBR);
   fsi.Free_Count = xint(nDataClus);
-  fsi.Nxt_Free   = xint(0);
   fsi.Nxt_Free   = xint(freeClusNum+1);
   // fsi结束标记
 }
@@ -453,7 +451,7 @@ void initFSI()
 void initDat()
 {
   // number of a FAT sectors 单个FAT表所占扇区数
-  nFAT = ((FSSIZE - nDBR - nRetain) * 4 + SECPERCLUS + SECSIZE) / (SECSIZE + 8/SECPERCLUS);
+  nFAT = 2;
   nData = FSSIZE - nDBR - nRetain - 2 * nFAT; // number of data sectors 数据扇区数
   nDataClus = nData / SECPERCLUS; // 簇数量
 
