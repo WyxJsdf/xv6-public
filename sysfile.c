@@ -194,6 +194,7 @@ sys_unlink(void)
  //   end_op();
     return -1;
   }
+        cprintf("fuck1\n");
 
   fat32_ilock(dp);
 
@@ -235,10 +236,12 @@ create(char *path, short type, short major, short minor)
   uint off;
   struct inode *ip, *dp;
   char name[DIRSIZ];
-
+  cprintf("create0\n");
   if((dp = fat32_nameiparent(path, name)) == 0)
     return 0;
+  cprintf("create1\n");
   fat32_ilock(dp);
+  cprintf("create2\n");
 
   if((ip = fat32_dirlookup(dp, name, &off)) != 0){
     fat32_iunlockput(dp);
@@ -248,15 +251,14 @@ create(char *path, short type, short major, short minor)
     fat32_iunlockput(ip);
     return 0;
   }
+  cprintf("create3\n");
 
   if((ip = fat32_ialloc(dp, type)) == 0)
     panic("create: ialloc");
-
-  fat32_ilock(ip);
+  cprintf("create4 %d %d\n", dp->inum, ip->inum);
   ip->major = major;
   ip->minor = minor;
   ip->nlink = 1;
-  fat32_iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.
 //    dp->nlink++;  // for ".."
@@ -265,9 +267,15 @@ create(char *path, short type, short major, short minor)
     if(fat32_dirlink(ip, ".", ip) < 0 || fat32_dirlink(ip, "..", dp) < 0)
       panic("create dots");
   }
+  cprintf("create5 %d %s %d\n", dp->inum, name, ip->size);
 
   if(fat32_dirlink(dp, name, ip) < 0)
     panic("create: dirlink");
+  cprintf("create6\n");
+  fat32_ilock(ip);
+  cprintf("create7\n");
+  fat32_iupdate(ip);
+  cprintf("create8\n");
 
   fat32_iunlockput(dp);
 
@@ -281,7 +289,7 @@ sys_open(void)
   int fd, omode;
   struct file *f;
   struct inode *ip;
-
+  cprintf("open1\n");
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -1;
 
@@ -291,17 +299,20 @@ sys_open(void)
     ip = create(path, T_FILE, 0, 0);
     if(ip == 0){
 //      end_op();
+  cprintf("open2\n");
       return -1;
     }
   } else {
     if((ip = fat32_namei(path)) == 0){
 //      end_op();
+  cprintf("open2\n");
       return -1;
     }
     fat32_ilock(ip);
     if(ip->type == T_DIR && omode != O_RDONLY){
       fat32_iunlockput(ip);
      // end_op();
+  cprintf("open2\n");
       return -1;
     }
   }
@@ -311,6 +322,7 @@ sys_open(void)
       fileclose(f);
     fat32_iunlockput(ip);
 //    end_op();
+  cprintf("open2\n");
     return -1;
   }
   fat32_iunlock(ip);
@@ -321,6 +333,9 @@ sys_open(void)
   f->off = 0;
   f->readable = !(omode & O_WRONLY);
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+  cprintf("open3 %s\n", path);
+    fat32_ilock(ip);
+  fat32_iunlock(ip);
   return fd;
 }
 
@@ -349,6 +364,7 @@ sys_mknod(void)
   int major, minor;
   
 //  begin_op();
+  cprintf("wyx1\n");
   if((len=argstr(0, &path)) < 0 ||
      argint(1, &major) < 0 ||
      argint(2, &minor) < 0 ||
@@ -356,6 +372,7 @@ sys_mknod(void)
  //   end_op();
     return -1;
   }
+  cprintf("wyx2\n");
   fat32_iunlockput(ip);
  // end_op();
   return 0;
@@ -372,6 +389,7 @@ sys_chdir(void)
   //  end_op();
     return -1;
   }
+        cprintf("fuck1\n");
   fat32_ilock(ip);
   if(ip->type != T_DIR){
     fat32_iunlockput(ip);
