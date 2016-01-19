@@ -620,7 +620,7 @@ fat32_dirlookup(struct inode *dp, char *name, uint *poff)
  //     continue;
     // cprintf("dedede %s\n", dip.deName);
    if (((dip.deHighClust << 16) | dip.deLowCluster) == 16){
-    panic((char*)dip.deName);
+    //panic((char*)dip.deName);
   }
     if(namecmp(name, (char*)dip.deName) == 0){
       // entry matches path element

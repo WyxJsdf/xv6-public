@@ -63,7 +63,7 @@ void czero(uint clus);
 * 函数功能：向簇中写入数据
 * 参数说明：clus簇号,offsec簇中扇区偏移量[0,1...SECPERCLUS),buf数据,curWSize为已向该簇中写入的字节数
 */
-void appendBuf(uint* clus, void *buf, int size, int curWSize);
+uint appendBuf(uint clus, void *buf, int size, int curWSize);
 /* 函数功能：时间获取函数*/
 uchar getSecond();
 uchar getMinute();
@@ -141,16 +141,16 @@ int main(int argc, char *argv[])
 
   // 写入根目录
   dire = mkFCB(T_DIR, "/", sizeof(DIR)*argc, &dirClusNum);
-  appendBuf(&dirClusNum, &dire, sizeof(DIR), rootWSize);
+  dirClusNum = appendBuf(dirClusNum, &dire, sizeof(DIR), rootWSize);
   rootWSize += sizeof(DIR);
   wClusNum = dirClusNum;
 
   dire = mkFCB(T_DIR, ".", sizeof(DIR)*argc, &dirClusNum);
-  appendBuf(&wClusNum, &dire, sizeof(DIR), rootWSize);
+  wClusNum = appendBuf(wClusNum, &dire, sizeof(DIR), rootWSize);
   rootWSize += sizeof(DIR);
 
   dire = mkFCB(T_DIR, "..", 0, &dirClusNum);
-  appendBuf(&wClusNum, &dire, sizeof(DIR), rootWSize);
+  wClusNum = appendBuf(wClusNum, &dire, sizeof(DIR), rootWSize);
   rootWSize += sizeof(DIR);
 
   // 写入其他文件
@@ -171,13 +171,13 @@ int main(int argc, char *argv[])
     // 写到目录区
     strncpy(filename, argv[i], FNSIZE);
     dire = mkFCB(T_FILE, filename, fileSize, &dirClusNum);
-    appendBuf(&wClusNum, &dire, sizeof(DIR), rootWSize);
+    wClusNum = appendBuf(wClusNum, &dire, sizeof(DIR), rootWSize);
     rootWSize += sizeof(DIR);
 
     // 写入文件
     while((cc = read(fd, buf, sizeof(buf))) > 0)
     {
-      appendBuf(&dirClusNum, buf, cc, fileWSize);
+      dirClusNum = appendBuf(dirClusNum, buf, cc, fileWSize);
       fileWSize += cc;
     }
 
@@ -387,20 +387,22 @@ void wsectnbytes(uint sec, uint index, void *buf, int wn)
   }
 }
 
-void appendBuf(uint* clus, void *buf, int size, int curWSize)
+uint appendBuf(uint clus, void *buf, int size, int curWSize)
 {
   uint expandClusNo = -1; // 下一个簇号
   uchar nextClus[4];  // 下一个簇号
   uint clusBytes = SECPERCLUS * SECSIZE;  // 单个簇字节数
-  uint curClus = *clus + (curWSize / clusBytes); // 需要向curClus簇内写入内容
+  uint curClus = clus; // 需要向curClus簇内写入内容
   uint offSec = (curWSize % clusBytes) / SECSIZE; // 取值范围：[0,1...SECPERCLUS)
   uint curSec = clus2sec(curClus) + offSec;
   uint hasWBytes = (curWSize % clusBytes) % SECSIZE;
   uint leaveBytes = SECSIZE - hasWBytes; // 该扇区剩余的空闲字节数
   char fileEnd[4] = {0xff,0xff,0xff,0xff}; // -1
   uint shouldWrite = min(size, leaveBytes);
+  uint res = clus;
   // priority 1: 是否需要扩展簇？
-  if(size + (curWSize % clusBytes) > clusBytes) {
+  if((size + (curWSize % clusBytes) > clusBytes) 
+    || (curWSize > 0 && curWSize % clusBytes == 0)) {
     while(expandClusNo == -1){ expandClusNo = cnallloc(); }
     nextClus[0] = expandClusNo;
     nextClus[1] = expandClusNo >> 8;
@@ -408,7 +410,11 @@ void appendBuf(uint* clus, void *buf, int size, int curWSize)
     nextClus[3] = expandClusNo >> 24;
     wsect4bytes(fatFstSec, curClus, nextClus);
     wsect4bytes(fatFstSec, expandClusNo, fileEnd);
-    *clus = expandClusNo;
+    res = expandClusNo;
+  }
+  if(curWSize > 0 && curWSize % clusBytes == 0) {
+    curClus = expandClusNo;
+    curSec = clus2sec(curClus);
   }
   // 向簇中写入buf
   while(size > 0) {
@@ -425,6 +431,7 @@ void appendBuf(uint* clus, void *buf, int size, int curWSize)
     }
     shouldWrite = min(size, leaveBytes);
   }
+  return res;
 }
 
 void initDBR() 
