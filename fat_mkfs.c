@@ -175,8 +175,6 @@ int main(int argc, char *argv[])
     rootWSize += sizeof(DIR);
 
     // 写入文件
-    appendBuf(dirClusNum, &dire, sizeof(DIR), fileWSize);
-    fileWSize += sizeof(DIR);
     while((cc = read(fd, buf, sizeof(buf))) > 0)
     {
       appendBuf(dirClusNum, buf, cc, fileWSize);
